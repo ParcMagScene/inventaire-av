@@ -1,0 +1,23 @@
+{
+    "price_low_factor": 0.80,
+    "price_high_factor": 1.25,
+    "outlier_sigma": 2.0,
+    "history_decay_days": 180,
+    "min_history_entries": 3,
+    "confidence_thresholds": {
+        "high": 0.75,
+        "medium": 0.40
+    },
+    "source_weights": {
+        "reference": 1.0,
+        "history": 0.8,
+        "category": 0.5,
+        "supplier": 0.6,
+        "default": 0.2
+    },
+    "supplier_profiles": {
+        "economique": 0.85,
+        "moyen": 1.00,
+        "cher": 1.20
+    }
+}

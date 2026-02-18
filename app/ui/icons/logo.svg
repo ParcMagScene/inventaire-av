@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00bfa5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7c4dff;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect x="10" y="10" width="180" height="180" rx="30" fill="url(#grad)"/>
+  <text x="100" y="90" text-anchor="middle" fill="white" font-family="Segoe UI,Arial" font-size="42" font-weight="bold">INV</text>
+  <text x="100" y="130" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-family="Segoe UI,Arial" font-size="20">AV</text>
+  <rect x="40" y="145" width="120" height="3" rx="1.5" fill="rgba(255,255,255,0.5)"/>
+  <text x="100" y="170" text-anchor="middle" fill="rgba(255,255,255,0.6)" font-family="Segoe UI,Arial" font-size="12">INVENTAIRE</text>
+</svg>

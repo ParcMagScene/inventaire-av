@@ -37,12 +37,13 @@ class Sidebar(QWidget):
     page_changed = Signal(int)
 
     PAGES = [
+        ("Dashboard", "dashboard"),
         ("Inventaire", "inventory"),
         ("Catégories", "category"),
         ("Emplacements", "location"),
         ("Fournisseurs", "supplier"),
         ("Paramètres prix", "price"),
-        ("Export PDF", "pdf"),
+        ("Export", "pdf"),
         ("À propos", "about"),
     ]
 
@@ -61,7 +62,7 @@ class Sidebar(QWidget):
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
 
-        version = QLabel("v1.0.0")
+        version = QLabel("v2.0.0")
         version.setObjectName("sidebarVersion")
         version.setAlignment(Qt.AlignCenter)
         layout.addWidget(version)

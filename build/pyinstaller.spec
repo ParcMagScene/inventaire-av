@@ -31,6 +31,7 @@ hidden_imports = [
     "reportlab.lib",
     "reportlab.platypus",
     "reportlab.graphics",
+    "openpyxl",
 ]
 
 a = Analysis(

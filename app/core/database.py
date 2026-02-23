@@ -14,7 +14,19 @@ from .models import (
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = BASE_DIR / "data" / "inventaire.db"
+
+
+def _resolve_db_path() -> Path:
+    """Résout le chemin de la base selon le mode (installé / portable / USB)."""
+    # 1) Variable d'environnement forcée
+    env_path = os.environ.get("INVENTAIRE_DB_PATH")
+    if env_path:
+        return Path(env_path)
+    # 2) Chemin relatif standard
+    return BASE_DIR / "data" / "inventaire.db"
+
+
+DB_PATH = _resolve_db_path()
 
 
 def _settings() -> dict:
@@ -129,7 +141,17 @@ def init_db(db_path: str | Path | None = None):
     os.makedirs(os.path.dirname(str(db_path or DB_PATH)), exist_ok=True)
     with get_connection(db_path) as conn:
         conn.executescript(_SCHEMA)
+        _migrate_db(conn)
         _seed_defaults(conn)
+
+
+def _migrate_db(conn: sqlite3.Connection):
+    """Migrations sûres — ajout de colonnes sans perte de données existantes."""
+    cursor = conn.execute("PRAGMA table_info(articles)")
+    existing_cols = {row[1] for row in cursor.fetchall()}
+
+    if "confidence_score" not in existing_cols:
+        conn.execute("ALTER TABLE articles ADD COLUMN confidence_score INTEGER DEFAULT 0")
 
 
 def _seed_defaults(conn: sqlite3.Connection):
@@ -316,14 +338,14 @@ def add_article(a: Article, db_path=None) -> int:
                  quantity, quantity_min, price_mode,
                  price_avg, price_low, price_high,
                  price_manual, price_manual_low, price_manual_high,
-                 confidence, price_source, notes)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 confidence, confidence_score, price_source, notes)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             a.reference, a.name, a.description, a.category_id,
             a.location_id, a.supplier_id, a.quantity, a.quantity_min,
             a.price_mode, a.price_avg, a.price_low, a.price_high,
             a.price_manual, a.price_manual_low, a.price_manual_high,
-            a.confidence, a.price_source, a.notes,
+            a.confidence, a.confidence_score, a.price_source, a.notes,
         ))
         return cur.lastrowid
 
@@ -336,7 +358,7 @@ def update_article(a: Article, db_path=None):
                 supplier_id=?, quantity=?, quantity_min=?, price_mode=?,
                 price_avg=?, price_low=?, price_high=?,
                 price_manual=?, price_manual_low=?, price_manual_high=?,
-                confidence=?, price_source=?, notes=?,
+                confidence=?, confidence_score=?, price_source=?, notes=?,
                 updated_at=datetime('now','localtime')
             WHERE id=?
         """, (
@@ -344,7 +366,7 @@ def update_article(a: Article, db_path=None):
             a.location_id, a.supplier_id, a.quantity, a.quantity_min,
             a.price_mode, a.price_avg, a.price_low, a.price_high,
             a.price_manual, a.price_manual_low, a.price_manual_high,
-            a.confidence, a.price_source, a.notes, a.id,
+            a.confidence, a.confidence_score, a.price_source, a.notes, a.id,
         ))
 
 
@@ -427,12 +449,34 @@ def get_stats(db_path=None) -> dict:
         total_value = conn.execute(
             "SELECT COALESCE(SUM(quantity * price_avg),0) FROM articles"
         ).fetchone()[0]
+        total_value_low = conn.execute(
+            "SELECT COALESCE(SUM(quantity * price_low),0) FROM articles"
+        ).fetchone()[0]
+        total_value_high = conn.execute(
+            "SELECT COALESCE(SUM(quantity * price_high),0) FROM articles"
+        ).fetchone()[0]
         low_stock = conn.execute(
             "SELECT COUNT(*) FROM articles WHERE quantity <= quantity_min AND quantity_min > 0"
+        ).fetchone()[0]
+        inconsistent = conn.execute(
+            "SELECT COUNT(*) FROM articles WHERE price_low > price_avg OR price_avg > price_high"
         ).fetchone()[0]
         return {
             "total_articles": total,
             "total_quantity": total_qty,
             "total_value": round(total_value, 2),
+            "total_value_low": round(total_value_low, 2),
+            "total_value_high": round(total_value_high, 2),
             "low_stock_count": low_stock,
+            "inconsistent_count": inconsistent,
         }
+
+
+def get_recent_updates(db_path=None, limit: int = 10) -> list:
+    """Retourne les N derniers articles mis à jour."""
+    with get_connection(db_path) as conn:
+        rows = conn.execute(
+            "SELECT a.reference, a.name, a.price_avg, a.updated_at "
+            "FROM articles a ORDER BY a.updated_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]

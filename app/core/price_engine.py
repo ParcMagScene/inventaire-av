@@ -7,6 +7,14 @@ Sources (par ordre de priorité) :
  3. Fournisseur (profil économique / moyen / cher)
  4. Catégorie (médiane des prix de la catégorie)
  5. Prix par défaut de la catégorie
+
+Améliorations v2 :
+ - Détection d'anomalies (IQR + sigma)
+ - Exclusion automatique des valeurs extrêmes
+ - Pondération temporelle améliorée (décroissance exponentielle)
+ - Pondération par volume
+ - Score de confiance 0–100
+ - Explication détaillée de la source principale
 """
 import math
 import statistics
@@ -55,7 +63,13 @@ class PriceEngine:
         default_result = self._from_default(article)
 
         # Fusion pondérée
-        return self._merge(article, hist_result, supplier_result, cat_result, default_result)
+        merged = self._merge(article, hist_result, supplier_result, cat_result, default_result)
+
+        # Détection d'anomalies sur le résultat final
+        anomalies = self._detect_anomalies(article, merged)
+        merged.anomalies = anomalies
+
+        return merged
 
     # ─── source 1 : référence ────────────────────────
     def _from_reference(self, article: Article) -> Optional[PriceSuggestion]:
@@ -69,6 +83,7 @@ class PriceEngine:
                     low_price=round(r.fixed_price * low_f, 2),
                     high_price=round(r.fixed_price * high_f, 2),
                     confidence="fort",
+                    confidence_score=95,
                     source="reference",
                     explanation=f"Prix fixé par référence : {r.fixed_price:.2f} €",
                 )
@@ -92,32 +107,28 @@ class PriceEngine:
                 avg = prices[0]
                 return self._build_suggestion(avg, "historique",
                                               f"Une seule entrée historique : {avg:.2f} €",
-                                              "faible")
+                                              "faible", confidence_score=15)
             return None
 
-        # Exclusion des aberrations (méthode sigma)
-        mean = statistics.mean(prices)
-        std = statistics.stdev(prices)
-        if std > 0:
-            filtered = [(e.price, e.quantity, e.date) for e in entries
-                        if abs(e.price - mean) <= sigma * std and e.price > 0]
-        else:
-            filtered = [(e.price, e.quantity, e.date) for e in entries if e.price > 0]
+        # Exclusion des aberrations (méthode IQR + sigma combinée)
+        filtered_entries = self._filter_outliers(entries, sigma)
 
-        if not filtered:
-            filtered = [(e.price, e.quantity, e.date) for e in entries if e.price > 0]
+        if not filtered_entries:
+            filtered_entries = [(e.price, e.quantity, e.date) for e in entries if e.price > 0]
 
-        # Pondération temporelle + volume
+        # Pondération temporelle améliorée + volume
         weighted_sum = 0.0
         weight_total = 0.0
-        for price, qty, date_str in filtered:
+        for price, qty, date_str in filtered_entries:
             try:
                 dt = datetime.fromisoformat(date_str)
             except (ValueError, TypeError):
                 dt = now
             age_days = max((now - dt).days, 0)
+            # Décroissance exponentielle améliorée
             time_weight = math.exp(-age_days / max(decay_days, 1))
-            vol_weight = max(qty, 1)
+            # Pondération par volume (racine carrée pour atténuer l'effet)
+            vol_weight = math.sqrt(max(qty, 1))
             w = time_weight * vol_weight
             weighted_sum += price * w
             weight_total += w
@@ -126,15 +137,57 @@ class PriceEngine:
             return None
 
         avg = weighted_sum / weight_total
-        n = len(filtered)
+        n = len(filtered_entries)
+        n_total = len(prices)
         min_hist = int(self._rule("min_history_entries", 3))
-        confidence = "fort" if n >= min_hist * 2 else ("moyen" if n >= min_hist else "faible")
 
+        # Score de confiance basé sur le nombre d'entrées et la fraîcheur
+        score = self._compute_confidence_score(
+            n_entries=n, min_entries=min_hist,
+            entries=entries, decay_days=decay_days
+        )
+        confidence = self._score_to_label(score)
+
+        excluded = n_total - n
+        excl_msg = f" ({excluded} aberrations exclues)" if excluded > 0 else ""
         return self._build_suggestion(
             avg, "historique",
-            f"Moyenne pondérée sur {n} entrées historiques : {avg:.2f} €",
-            confidence,
+            f"Moyenne pondérée sur {n}/{n_total} entrées historiques : {avg:.2f} €{excl_msg}",
+            confidence, confidence_score=score,
         )
+
+    # ─── Filtrage des aberrations (IQR + sigma) ──────
+    def _filter_outliers(self, entries: List[PriceHistory],
+                         sigma: float) -> list:
+        """Filtre les aberrations avec la méthode IQR et sigma combinées."""
+        prices = [e.price for e in entries if e.price > 0]
+        if len(prices) < 3:
+            return [(e.price, e.quantity, e.date) for e in entries if e.price > 0]
+
+        mean = statistics.mean(prices)
+        std = statistics.stdev(prices)
+
+        # Méthode IQR (interquartile range)
+        sorted_prices = sorted(prices)
+        n = len(sorted_prices)
+        q1 = sorted_prices[n // 4]
+        q3 = sorted_prices[(3 * n) // 4]
+        iqr = q3 - q1
+        iqr_low = q1 - 1.5 * iqr
+        iqr_high = q3 + 1.5 * iqr
+
+        filtered = []
+        for e in entries:
+            if e.price <= 0:
+                continue
+            # Exclure si hors IQR ET hors sigma
+            in_sigma = (std == 0) or (abs(e.price - mean) <= sigma * std)
+            in_iqr = iqr_low <= e.price <= iqr_high
+            if in_sigma or in_iqr:
+                filtered.append((e.price, e.quantity, e.date))
+
+        return filtered if filtered else [(e.price, e.quantity, e.date)
+                                          for e in entries if e.price > 0]
 
     # ─── source 3 : fournisseur ──────────────────────
     def _from_supplier(self, article: Article) -> Optional[PriceSuggestion]:
@@ -156,7 +209,7 @@ class PriceEngine:
         return self._build_suggestion(
             avg, "fournisseur",
             f"Profil fournisseur « {supplier.profile} » appliqué au défaut catégorie : {avg:.2f} €",
-            "moyen",
+            "moyen", confidence_score=45,
         )
 
     # ─── source 4 : catégorie (médiane) ──────────────
@@ -168,10 +221,13 @@ class PriceEngine:
         if not prices:
             return None
         med = statistics.median(prices)
+        n = len(prices)
+        score = min(60, 20 + n * 8)  # Plus d'articles = plus de confiance
         return self._build_suggestion(
             med, "catégorie",
-            f"Médiane de {len(prices)} articles de la même catégorie : {med:.2f} €",
-            "moyen" if len(prices) >= 3 else "faible",
+            f"Médiane de {n} articles de la même catégorie : {med:.2f} €",
+            "moyen" if n >= 3 else "faible",
+            confidence_score=score,
         )
 
     # ─── source 5 : défaut ──────────────────────────
@@ -185,7 +241,7 @@ class PriceEngine:
         return self._build_suggestion(
             cat.default_price, "défaut",
             f"Prix par défaut de la catégorie « {cat.name} » : {cat.default_price:.2f} €",
-            "faible",
+            "faible", confidence_score=10,
         )
 
     # ─── fusion pondérée ─────────────────────────────
@@ -209,6 +265,7 @@ class PriceEngine:
             return PriceSuggestion(
                 explanation="Aucune donnée disponible pour suggérer un prix.",
                 confidence="faible",
+                confidence_score=0,
                 source="aucune",
             )
 
@@ -235,26 +292,141 @@ class PriceEngine:
                 best = c
 
         avg = weighted_price / total_w if total_w > 0 else 0
-        # Confiance globale
-        conf_scores = {"fort": 3, "moyen": 2, "faible": 1}
-        avg_conf = statistics.mean([conf_scores.get(c.confidence, 1) for c in candidates])
-        if avg_conf >= 2.5:
-            confidence = "fort"
-        elif avg_conf >= 1.5:
-            confidence = "moyen"
-        else:
-            confidence = "faible"
+
+        # Score de confiance global pondéré
+        score_weighted = sum(
+            c.confidence_score * weight_map.get(c.source, 0.3)
+            for c in candidates
+        )
+        total_source_w = sum(weight_map.get(c.source, 0.3) for c in candidates)
+        global_score = int(score_weighted / total_source_w) if total_source_w > 0 else 0
+        # Bonus pour sources multiples
+        global_score = min(100, global_score + len(candidates) * 5)
+        confidence = self._score_to_label(global_score)
 
         sources = ", ".join(c.source for c in candidates)
         return self._build_suggestion(
             avg, best.source,
-            f"Fusion pondérée ({sources}) → {avg:.2f} € (source principale : {best.source})",
-            confidence,
+            f"Fusion pondérée ({sources}) → {avg:.2f} € "
+            f"(source principale : {best.source}, score : {global_score}/100)",
+            confidence, confidence_score=global_score,
         )
 
-    # ─── utilitaire ──────────────────────────────────
+    # ─── Détection d'anomalies ───────────────────────
+    def _detect_anomalies(self, article: Article,
+                          suggestion: PriceSuggestion) -> list:
+        """Détecte les incohérences dans les prix."""
+        anomalies = []
+        if suggestion.avg_price <= 0:
+            return anomalies
+
+        # Prix bas > prix moyen
+        if suggestion.low_price > suggestion.avg_price:
+            anomalies.append("Prix bas supérieur au prix moyen")
+
+        # Prix moyen > prix haut
+        if suggestion.avg_price > suggestion.high_price:
+            anomalies.append("Prix moyen supérieur au prix haut")
+
+        # Écart trop important entre bas et haut (> 5x)
+        if suggestion.low_price > 0:
+            ratio = suggestion.high_price / suggestion.low_price
+            if ratio > 5:
+                anomalies.append(
+                    f"Écart prix bas/haut très élevé (×{ratio:.1f})"
+                )
+
+        # Prix manuel très éloigné du prix suggéré
+        if article.price_manual and article.price_manual > 0:
+            diff_pct = abs(article.price_manual - suggestion.avg_price) / suggestion.avg_price * 100
+            if diff_pct > 50:
+                anomalies.append(
+                    f"Prix manuel ({article.price_manual:.2f} €) éloigné de "
+                    f"{diff_pct:.0f}% du prix suggéré ({suggestion.avg_price:.2f} €)"
+                )
+
+        return anomalies
+
+    # ─── Score de confiance 0–100 ────────────────────
+    def _compute_confidence_score(self, n_entries: int, min_entries: int,
+                                  entries: List[PriceHistory],
+                                  decay_days: float) -> int:
+        """Calcule un score de confiance 0–100 basé sur plusieurs facteurs."""
+        score = 0.0
+        now = datetime.now()
+
+        # Factor 1 : Nombre d'entrées (0–40 points)
+        if n_entries >= min_entries * 3:
+            score += 40
+        elif n_entries >= min_entries * 2:
+            score += 30
+        elif n_entries >= min_entries:
+            score += 20
+        elif n_entries >= 2:
+            score += 10
+        elif n_entries >= 1:
+            score += 5
+
+        # Factor 2 : Fraîcheur des données (0–30 points)
+        if entries:
+            try:
+                most_recent = max(
+                    datetime.fromisoformat(e.date) for e in entries
+                    if e.date
+                )
+                age = (now - most_recent).days
+                if age <= 30:
+                    score += 30
+                elif age <= 90:
+                    score += 20
+                elif age <= 180:
+                    score += 10
+                elif age <= 365:
+                    score += 5
+            except (ValueError, TypeError):
+                pass
+
+        # Factor 3 : Cohérence des prix (0–20 points)
+        prices = [e.price for e in entries if e.price > 0]
+        if len(prices) >= 2:
+            mean = statistics.mean(prices)
+            cv = statistics.stdev(prices) / mean if mean > 0 else 1
+            if cv < 0.1:
+                score += 20  # Très cohérent
+            elif cv < 0.2:
+                score += 15
+            elif cv < 0.3:
+                score += 10
+            elif cv < 0.5:
+                score += 5
+
+        # Factor 4 : Volume total traité (0–10 points)
+        total_vol = sum(e.quantity for e in entries)
+        if total_vol >= 100:
+            score += 10
+        elif total_vol >= 50:
+            score += 7
+        elif total_vol >= 10:
+            score += 5
+        elif total_vol >= 3:
+            score += 3
+
+        return min(100, int(score))
+
+    # ─── utilitaires ─────────────────────────────────
+    @staticmethod
+    def _score_to_label(score: int) -> str:
+        """Convertit un score numérique en label textuel."""
+        if score >= 70:
+            return "fort"
+        elif score >= 40:
+            return "moyen"
+        else:
+            return "faible"
+
     def _build_suggestion(self, avg: float, source: str,
-                          explanation: str, confidence: str) -> PriceSuggestion:
+                          explanation: str, confidence: str,
+                          confidence_score: int = 0) -> PriceSuggestion:
         low_f = self._rule("price_low_factor", 0.80)
         high_f = self._rule("price_high_factor", 1.25)
         return PriceSuggestion(
@@ -262,6 +434,7 @@ class PriceEngine:
             low_price=round(avg * low_f, 2),
             high_price=round(avg * high_f, 2),
             confidence=confidence,
+            confidence_score=confidence_score,
             source=source,
             explanation=explanation,
         )
@@ -277,6 +450,7 @@ class PriceEngine:
             article.price_low = article.price_manual_low or 0.0
             article.price_high = article.price_manual_high or 0.0
             article.confidence = "fort"
+            article.confidence_score = 90
             article.price_source = "Manuel"
 
         elif article.price_mode == "automatique":
@@ -284,6 +458,7 @@ class PriceEngine:
             article.price_low = suggestion.low_price
             article.price_high = suggestion.high_price
             article.confidence = suggestion.confidence
+            article.confidence_score = suggestion.confidence_score
             article.price_source = suggestion.explanation
 
         elif article.price_mode == "mixte":
@@ -294,6 +469,7 @@ class PriceEngine:
                 article.price_low = ref.low_price
                 article.price_high = ref.high_price
                 article.confidence = ref.confidence
+                article.confidence_score = ref.confidence_score
                 article.price_source = ref.explanation
             else:
                 cat = self._from_category(article)
@@ -302,12 +478,18 @@ class PriceEngine:
                     article.price_low = cat.low_price
                     article.price_high = cat.high_price
                     article.confidence = cat.confidence
+                    article.confidence_score = cat.confidence_score
                     article.price_source = cat.explanation
                 else:
                     article.price_avg = suggestion.avg_price
                     article.price_low = suggestion.low_price
                     article.price_high = suggestion.high_price
                     article.confidence = suggestion.confidence
+                    article.confidence_score = suggestion.confidence_score
                     article.price_source = suggestion.explanation
+
+        # Ajouter info anomalies dans la source si détectées
+        if suggestion.anomalies:
+            article.price_source += f" ⚠ Anomalies : {', '.join(suggestion.anomalies)}"
 
         return article

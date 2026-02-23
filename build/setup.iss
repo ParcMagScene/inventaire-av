@@ -12,8 +12,8 @@
 [Setup]
 AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
 AppName=Inventaire AV
-AppVersion=1.0.0
-AppVerName=Inventaire AV 1.0.0
+AppVersion=2.0.0
+AppVerName=Inventaire AV 2.0.0
 AppPublisher=Inventaire AV
 AppPublisherURL=https://github.com/inventaire-av
 DefaultDirName={autopf}\InventaireAV
@@ -21,7 +21,7 @@ DefaultGroupName=Inventaire AV
 AllowNoIcons=yes
 ; Chemin de sortie du setup.exe
 OutputDir=..\dist\installer
-OutputBaseFilename=InventaireAV_Setup_1.0.0
+OutputBaseFilename=InventaireAV_Setup_2.0.0
 ; Icône du setup
 SetupIconFile=..\app\ui\icons\logo.ico
 Compression=lzma2/ultra64

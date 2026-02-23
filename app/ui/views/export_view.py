@@ -1,5 +1,5 @@
 """
-export_view.py — Export PDF avec filtres.
+export_view.py — Export PDF, CSV et XLSX avec filtres.
 """
 import os
 from datetime import datetime
@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 
 from ...core import database as db
 from ...core.pdf_exporter import PDFExporter
+from ...core.export_engine import ExportEngine
 
 
 class ExportView(QWidget):
@@ -24,12 +25,12 @@ class ExportView(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(16)
 
-        title = QLabel("Export PDF")
+        title = QLabel("Export")
         title.setObjectName("sectionTitle")
         layout.addWidget(title)
 
         desc = QLabel(
-            "Générez un rapport PDF complet de votre inventaire, avec totaux "
+            "Générez un rapport PDF, CSV ou XLSX de votre inventaire, avec totaux "
             "par catégorie, par emplacement et totaux globaux."
         )
         desc.setWordWrap(True)
@@ -53,15 +54,29 @@ class ExportView(QWidget):
 
         layout.addWidget(grp)
 
-        # ── Bouton export ──
+        # ── Boutons export ──
         btn_bar = QHBoxLayout()
         btn_bar.addStretch()
 
         btn_export = QPushButton("  Exporter en PDF")
-        btn_export.setMinimumWidth(200)
+        btn_export.setMinimumWidth(180)
         btn_export.setMinimumHeight(44)
         btn_export.clicked.connect(self._export)
         btn_bar.addWidget(btn_export)
+
+        btn_csv = QPushButton("  Exporter en CSV")
+        btn_csv.setObjectName("btnSecondary")
+        btn_csv.setMinimumWidth(180)
+        btn_csv.setMinimumHeight(44)
+        btn_csv.clicked.connect(self._export_csv)
+        btn_bar.addWidget(btn_csv)
+
+        btn_xlsx = QPushButton("  Exporter en XLSX")
+        btn_xlsx.setObjectName("btnSecondary")
+        btn_xlsx.setMinimumWidth(180)
+        btn_xlsx.setMinimumHeight(44)
+        btn_xlsx.clicked.connect(self._export_xlsx)
+        btn_bar.addWidget(btn_xlsx)
 
         btn_bar.addStretch()
         layout.addLayout(btn_bar)
@@ -96,6 +111,42 @@ class ExportView(QWidget):
         except Exception as e:
             self.status_label.setText(f"❌  Erreur : {e}")
             QMessageBox.critical(self, "Erreur", f"Erreur lors de l'export :\n{e}")
+
+    def _export_csv(self):
+        date_str = datetime.now().strftime("%Y-%m-%d_%H%M")
+        default_name = f"inventaire_{date_str}.csv"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Enregistrer le CSV", default_name,
+            "Fichiers CSV (*.csv)",
+        )
+        if not path:
+            return
+        try:
+            engine = ExportEngine()
+            engine.export_csv(path)
+            self.status_label.setText(f"✅  CSV exporté : {path}")
+            QMessageBox.information(self, "Succès", f"CSV exporté avec succès :\n{path}")
+        except Exception as e:
+            self.status_label.setText(f"❌  Erreur : {e}")
+            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'export CSV :\n{e}")
+
+    def _export_xlsx(self):
+        date_str = datetime.now().strftime("%Y-%m-%d_%H%M")
+        default_name = f"inventaire_{date_str}.xlsx"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Enregistrer le XLSX", default_name,
+            "Fichiers Excel (*.xlsx)",
+        )
+        if not path:
+            return
+        try:
+            engine = ExportEngine()
+            engine.export_xlsx(path)
+            self.status_label.setText(f"✅  XLSX exporté : {path}")
+            QMessageBox.information(self, "Succès", f"XLSX exporté avec succès :\n{path}")
+        except Exception as e:
+            self.status_label.setText(f"❌  Erreur : {e}")
+            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'export XLSX :\n{e}")
 
     def refresh(self):
         # Recharger les combos

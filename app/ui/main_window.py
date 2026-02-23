@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QIcon
 
 from .components.sidebar import Sidebar
+from .views.dashboard_view import DashboardView
 from .views.inventory_view import InventoryView
 from .views.categories_view import CategoriesView
 from .views.locations_view import LocationsView
@@ -58,6 +59,7 @@ class MainWindow(QMainWindow):
 
         # Instanciation des vues
         self.views = [
+            DashboardView(),
             InventoryView(),
             CategoriesView(),
             LocationsView(),
@@ -71,7 +73,7 @@ class MainWindow(QMainWindow):
 
         # ── Barre d'état ──
         status = QStatusBar()
-        status.showMessage("Inventaire AV v1.0.0 — Prêt")
+        status.showMessage("Inventaire AV v2.0.0 — Prêt")
         self.setStatusBar(status)
 
     def _switch_page(self, index: int):

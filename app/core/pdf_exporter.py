@@ -1,5 +1,12 @@
 """
 pdf_exporter.py — Export PDF professionnel avec ReportLab.
+
+Améliorations v2 :
+ - Totaux par ligne (Total Bas / Moyen / Haut)
+ - Totaux par fournisseur
+ - Mode de prix utilisé en en-tête
+ - Pied de page avec date de génération
+ - Totaux globaux améliorés (bas/moyen/haut)
 """
 import os
 from datetime import datetime
@@ -16,6 +23,7 @@ from reportlab.platypus import (
 
 from . import database as db
 from .models import Article
+from .totals_engine import TotalsEngine
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -28,11 +36,27 @@ ROW_EVEN = colors.HexColor("#f5f5f5")
 ROW_ODD = colors.white
 
 
+def _footer(canvas, doc):
+    """Pied de page avec date et numéro de page."""
+    canvas.saveState()
+    canvas.setFont("Helvetica", 8)
+    canvas.setFillColor(colors.gray)
+    date_str = datetime.now().strftime("%d/%m/%Y à %H:%M")
+    canvas.drawString(1.5 * cm, 1 * cm,
+                      f"Inventaire AV — Rapport généré le {date_str}")
+    canvas.drawRightString(
+        doc.pagesize[0] - 1.5 * cm, 1 * cm,
+        f"Page {canvas.getPageNumber()}"
+    )
+    canvas.restoreState()
+
+
 class PDFExporter:
     """Génère un rapport PDF de l'inventaire."""
 
     def __init__(self, db_path=None):
         self.db_path = db_path
+        self.totals = TotalsEngine(db_path)
 
     def export(self, output_path: str,
                category_id: int | None = None,
@@ -43,6 +67,7 @@ class PDFExporter:
                                    location_id=location_id)
         categories = {c.id: c for c in db.get_categories(self.db_path)}
         locations = {l.id: l for l in db.get_locations(self.db_path)}
+        suppliers = {s.id: s for s in db.get_suppliers(self.db_path)}
 
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
         doc = SimpleDocTemplate(
@@ -51,7 +76,7 @@ class PDFExporter:
             leftMargin=1.5 * cm,
             rightMargin=1.5 * cm,
             topMargin=1.5 * cm,
-            bottomMargin=1.5 * cm,
+            bottomMargin=2 * cm,
         )
 
         elements = []
@@ -90,7 +115,7 @@ class PDFExporter:
         elements.append(Paragraph("Rapport généré automatiquement par Inventaire AV", subtitle_style))
         elements.append(Spacer(1, 8 * mm))
 
-        # ─── Tableau principal ────────────────────────
+        # ─── Tableau principal avec totaux par ligne ──
         if articles:
             elements.append(Paragraph("Liste des articles", styles["Heading2"]))
             elements.append(Spacer(1, 3 * mm))
@@ -98,7 +123,7 @@ class PDFExporter:
             elements.append(Spacer(1, 8 * mm))
 
         # ─── Totaux par catégorie ────────────────────
-        cat_totals = self._totals_by_category(articles, categories)
+        cat_totals = self.totals.totals_by_category(articles)
         if cat_totals:
             elements.append(Paragraph("Totaux par catégorie", styles["Heading2"]))
             elements.append(Spacer(1, 3 * mm))
@@ -106,11 +131,19 @@ class PDFExporter:
             elements.append(Spacer(1, 8 * mm))
 
         # ─── Totaux par emplacement ──────────────────
-        loc_totals = self._totals_by_location(articles, locations)
+        loc_totals = self.totals.totals_by_location(articles)
         if loc_totals:
             elements.append(Paragraph("Totaux par emplacement", styles["Heading2"]))
             elements.append(Spacer(1, 3 * mm))
             elements.extend(self._build_summary_table(loc_totals, "Emplacement"))
+            elements.append(Spacer(1, 8 * mm))
+
+        # ─── Totaux par fournisseur ──────────────────
+        sup_totals = self.totals.totals_by_supplier(articles)
+        if sup_totals:
+            elements.append(Paragraph("Totaux par fournisseur", styles["Heading2"]))
+            elements.append(Spacer(1, 3 * mm))
+            elements.extend(self._build_summary_table(sup_totals, "Fournisseur"))
             elements.append(Spacer(1, 8 * mm))
 
         # ─── Totaux globaux ─────────────────────────
@@ -118,17 +151,19 @@ class PDFExporter:
         elements.append(Spacer(1, 3 * mm))
         elements.extend(self._build_global_totals(articles))
 
-        doc.build(elements)
+        doc.build(elements, onFirstPage=_footer, onLaterPages=_footer)
         return output_path
 
-    # ─── Tableau articles ────────────────────────────
+    # ─── Tableau articles avec totaux par ligne ──────
     def _build_article_table(self, articles: List[Article], styles) -> list:
-        cell_style = ParagraphStyle("Cell", fontSize=7, leading=9)
-        header_style = ParagraphStyle("HCell", fontSize=7, leading=9,
+        cell_style = ParagraphStyle("Cell", fontSize=6.5, leading=8)
+        header_style = ParagraphStyle("HCell", fontSize=6.5, leading=8,
                                       textColor=colors.white, fontName="Helvetica-Bold")
 
-        headers = ["Réf.", "Nom", "Catégorie", "Emplacement", "Qté",
-                    "Prix Bas", "Prix Moy.", "Prix Haut", "Mode", "Confiance"]
+        headers = ["Réf.", "Nom", "Cat.", "Empl.", "Qté",
+                    "P.Bas", "P.Moy.", "P.Haut",
+                    "T.Bas", "T.Moy.", "T.Haut",
+                    "Mode", "Conf."]
 
         data = [[Paragraph(h, header_style) for h in headers]]
         for a in articles:
@@ -141,25 +176,32 @@ class PDFExporter:
                 Paragraph(f"{a.price_low:.2f} €", cell_style),
                 Paragraph(f"{a.price_avg:.2f} €", cell_style),
                 Paragraph(f"{a.price_high:.2f} €", cell_style),
+                Paragraph(f"{a.total_low:.2f} €", cell_style),
+                Paragraph(f"{a.total_avg:.2f} €", cell_style),
+                Paragraph(f"{a.total_high:.2f} €", cell_style),
                 Paragraph(str(a.price_mode), cell_style),
-                Paragraph(str(a.confidence), cell_style),
+                Paragraph(f"{a.confidence} ({a.confidence_score})", cell_style),
             ])
 
-        col_widths = [2.2*cm, 4.5*cm, 2.8*cm, 2.8*cm, 1.2*cm,
-                      2*cm, 2*cm, 2*cm, 2*cm, 2*cm]
+        col_widths = [1.8*cm, 3.5*cm, 2*cm, 2*cm, 1*cm,
+                      1.6*cm, 1.6*cm, 1.6*cm,
+                      1.8*cm, 1.8*cm, 1.8*cm,
+                      1.5*cm, 1.8*cm]
 
         table = Table(data, colWidths=col_widths, repeatRows=1)
         style_cmds = [
             ("BACKGROUND", (0, 0), (-1, 0), HEADER_BG),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, 0), 7),
-            ("FONTSIZE", (0, 1), (-1, -1), 7),
-            ("ALIGN", (4, 1), (7, -1), "RIGHT"),
+            ("FONTSIZE", (0, 0), (-1, 0), 6.5),
+            ("FONTSIZE", (0, 1), (-1, -1), 6.5),
+            ("ALIGN", (4, 1), (10, -1), "RIGHT"),
             ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cccccc")),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("TOPPADDING", (0, 0), (-1, -1), 2),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            # Highlight totaux par ligne
+            ("BACKGROUND", (8, 0), (10, 0), TURQUOISE),
         ]
         for i in range(1, len(data)):
             bg = ROW_EVEN if i % 2 == 0 else ROW_ODD
@@ -167,36 +209,28 @@ class PDFExporter:
         table.setStyle(TableStyle(style_cmds))
         return [table]
 
-    # ─── Totaux ─────────────────────────────────────
-    def _totals_by_category(self, articles, categories):
-        totals = {}
-        for a in articles:
-            name = a.category_name or "Sans catégorie"
-            if name not in totals:
-                totals[name] = {"qty": 0, "value": 0.0}
-            totals[name]["qty"] += a.quantity
-            totals[name]["value"] += a.quantity * a.price_avg
-        return totals
-
-    def _totals_by_location(self, articles, locations):
-        totals = {}
-        for a in articles:
-            name = a.location_name or "Sans emplacement"
-            if name not in totals:
-                totals[name] = {"qty": 0, "value": 0.0}
-            totals[name]["qty"] += a.quantity
-            totals[name]["value"] += a.quantity * a.price_avg
-        return totals
-
+    # ─── Totaux par groupe (amélioré avec bas/moyen/haut) ──
     def _build_summary_table(self, totals: dict, label: str) -> list:
-        data = [[label, "Quantité", "Valeur estimée"]]
+        data = [[label, "Quantité", "Valeur Basse", "Valeur Moyenne", "Valeur Haute"]]
         for name, vals in sorted(totals.items()):
-            data.append([name, str(vals["qty"]), f"{vals['value']:.2f} €"])
+            data.append([
+                name, str(vals["qty"]),
+                f"{vals['low']:.2f} €",
+                f"{vals['avg']:.2f} €",
+                f"{vals['high']:.2f} €",
+            ])
         total_qty = sum(v["qty"] for v in totals.values())
-        total_val = sum(v["value"] for v in totals.values())
-        data.append(["TOTAL", str(total_qty), f"{total_val:.2f} €"])
+        total_low = sum(v["low"] for v in totals.values())
+        total_avg = sum(v["avg"] for v in totals.values())
+        total_high = sum(v["high"] for v in totals.values())
+        data.append([
+            "TOTAL", str(total_qty),
+            f"{total_low:.2f} €",
+            f"{total_avg:.2f} €",
+            f"{total_high:.2f} €",
+        ])
 
-        table = Table(data, colWidths=[8*cm, 3*cm, 4*cm])
+        table = Table(data, colWidths=[6*cm, 2*cm, 3.5*cm, 3.5*cm, 3.5*cm])
         style_cmds = [
             ("BACKGROUND", (0, 0), (-1, 0), HEADER_BG),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -215,18 +249,15 @@ class PDFExporter:
         return [table]
 
     def _build_global_totals(self, articles: List[Article]) -> list:
-        total_qty = sum(a.quantity for a in articles)
-        total_val_low = sum(a.quantity * a.price_low for a in articles)
-        total_val_avg = sum(a.quantity * a.price_avg for a in articles)
-        total_val_high = sum(a.quantity * a.price_high for a in articles)
+        gt = self.totals.global_totals(articles)
 
         data = [
             ["Métrique", "Valeur"],
-            ["Nombre de références", str(len(articles))],
-            ["Quantité totale", str(total_qty)],
-            ["Valeur totale (fourchette basse)", f"{total_val_low:.2f} €"],
-            ["Valeur totale (prix moyen)", f"{total_val_avg:.2f} €"],
-            ["Valeur totale (fourchette haute)", f"{total_val_high:.2f} €"],
+            ["Nombre de références", str(gt["nb_references"])],
+            ["Quantité totale", str(gt["total_quantity"])],
+            ["Valeur totale (fourchette basse)", f"{gt['total_low']:.2f} €"],
+            ["Valeur totale (prix moyen)", f"{gt['total_avg']:.2f} €"],
+            ["Valeur totale (fourchette haute)", f"{gt['total_high']:.2f} €"],
         ]
         table = Table(data, colWidths=[8*cm, 5*cm])
         table.setStyle(TableStyle([

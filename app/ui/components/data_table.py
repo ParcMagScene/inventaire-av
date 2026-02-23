@@ -1,7 +1,10 @@
 """
-data_table.py — Tableau moderne avec tri, recherche et édition.
+data_table.py — Tableau moderne avec tri, recherche, filtres et coloration dynamique.
 """
+from typing import Callable
+
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QLineEdit, QComboBox, QPushButton, QHeaderView, QAbstractItemView,
@@ -10,7 +13,7 @@ from PySide6.QtWidgets import (
 
 
 class DataTable(QWidget):
-    """Composant tableau générique avec barre de recherche et filtres."""
+    """Composant tableau générique avec barre de recherche, filtres et coloration."""
 
     row_double_clicked = Signal(int)      # émet l'index de la ligne
     selection_changed = Signal()
@@ -18,10 +21,12 @@ class DataTable(QWidget):
     def __init__(self, columns: list[str], parent=None, *,
                  editable: bool = False,
                  filter_column: int | None = None,
-                 filter_items: list[str] | None = None):
+                 filter_items: list[str] | None = None,
+                 color_function: Callable[[list, int], QColor | None] | None = None):
         super().__init__(parent)
         self._columns = columns
         self._all_data: list[list] = []
+        self._color_fn = color_function
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -118,6 +123,11 @@ class DataTable(QWidget):
                     item.setData(Qt.UserRole, value)
                 else:
                     item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                # Coloration dynamique
+                if self._color_fn is not None:
+                    color = self._color_fn(row, c)
+                    if color is not None:
+                        item.setForeground(color)
                 self.table.setItem(r, c, item)
         self.table.setSortingEnabled(True)
         self.count_label.setText(f"{len(rows)} éléments")

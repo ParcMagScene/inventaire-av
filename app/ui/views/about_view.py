@@ -48,7 +48,7 @@ class AboutView(QWidget):
         title.setStyleSheet("font-size: 28px;")
         layout.addWidget(title)
 
-        version = QLabel("Version 1.0.0")
+        version = QLabel("Version 2.0.0")
         version.setAlignment(Qt.AlignCenter)
         version.setStyleSheet("color: #a0a0a0; font-size: 14px;")
         layout.addWidget(version)
@@ -63,12 +63,16 @@ class AboutView(QWidget):
             "Application de gestion d'inventaire de consommables et pièces "
             "détachées audiovisuelles.\n\n"
             "Conçue pour les chefs de parc, cette application propose :\n"
+            "• Tableau de bord métier avec KPIs et graphiques\n"
             "• Gestion complète des articles, catégories, emplacements et fournisseurs\n"
-            "• Moteur intelligent de suggestion de prix avec fusion multi-sources\n"
-            "• Export PDF professionnel avec totaux et statistiques\n"
+            "• Moteur intelligent de suggestion de prix avec détection d'anomalies\n"
+            "• Export PDF, CSV et XLSX professionnels avec totaux et statistiques\n"
+            "• Totaux par ligne (bas / moyen / haut) et totaux globaux dynamiques\n"
             "• Trois modes de prix : Manuel, Automatique et Mixte\n"
-            "• Indice de confiance sur chaque prix suggéré\n\n"
-            "Technologies : Python 3 · PySide6 (Qt6) · SQLite · ReportLab"
+            "• Indice de confiance 0–100 sur chaque prix suggéré\n"
+            "• Filtres rapides (stock bas, prix incohérent, sans prix)\n"
+            "• Vérification d'intégrité SHA-256\n\n"
+            "Technologies : Python 3 · PySide6 (Qt6) · SQLite · ReportLab · openpyxl"
         )
         desc.setWordWrap(True)
         desc.setStyleSheet("font-size: 13px; line-height: 1.6;")
@@ -82,9 +86,11 @@ class AboutView(QWidget):
         tech = QLabel(
             "• Base de données : SQLite (fichier local inventaire.db)\n"
             "• Interface : PySide6 / Qt6 — thème sombre professionnel\n"
-            "• Moteur de prix : fusion pondérée multi-sources + détection aberrations\n"
-            "• Export : ReportLab (PDF paysage A4)\n"
-            "• Packaging : PyInstaller + Inno Setup"
+            "• Moteur de prix : fusion pondérée multi-sources + IQR + détection aberrations\n"
+            "• Export : ReportLab (PDF A4 paysage) · CSV · XLSX stylisé\n"
+            "• Calcul des totaux : moteur dynamique par catégorie / emplacement / fournisseur\n"
+            "• Intégrité : vérification SHA-256 des fichiers applicatifs\n"
+            "• Packaging : PyInstaller + Inno Setup · Mode portable USB"
         )
         tech.setWordWrap(True)
         tech.setStyleSheet("font-size: 12px; color: #a0a0a0;")

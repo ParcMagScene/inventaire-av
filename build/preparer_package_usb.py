@@ -205,7 +205,12 @@ def write_bat(path: Path, content: str):
 
 def step_create_scripts():
     """Crée les scripts d'installation et de lancement USB."""
-    print("  [6/6] Création des scripts USB...")
+    print("  [6/7] Création des scripts USB...")
+
+    # Créer le marqueur de mode portable
+    portable_marker = OUTPUT_DIR / "inventaire-app" / ".portable"
+    portable_marker.write_text("Mode portable USB\n", encoding="utf-8")
+    print("        → .portable créé")
 
     # --- INSTALLER.bat ---
     installer = OUTPUT_DIR / "INSTALLER.bat"
@@ -370,6 +375,20 @@ start "" "%PYTHON_EXE%" -m app.main
     print("        → LANCER_DEPUIS_USB.vbs créé")
 
 
+def step_generate_integrity():
+    """Génère le manifeste d'intégrité SHA-256."""
+    print("  [7/7] Génération du manifeste d'intégrité...")
+    sys.path.insert(0, str(SRC_DIR))
+    try:
+        from app.core.integrity import generate_manifest
+        app_dest = OUTPUT_DIR / "inventaire-app"
+        manifest_path = generate_manifest(app_dest)
+        print(f"        → {manifest_path.name} généré")
+    except Exception as e:
+        print(f"        → Avertissement : {e}")
+        print("        → Manifeste non généré (non bloquant)")
+
+
 def print_summary():
     """Affiche le résumé."""
     print()
@@ -387,6 +406,8 @@ def print_summary():
     print("    └── inventaire-app/        ← Application + wheels")
     print("        ├── app/")
     print("        ├── wheels/")
+    print("        ├── .portable           ← Marqueur mode portable")
+    print("        ├── integrity_manifest.json")
     print("        ├── Lanceur.bat")
     print("        └── requirements.txt")
     print()
@@ -408,6 +429,7 @@ def main():
     step_install_pip()
     step_download_wheels()
     step_create_scripts()
+    step_generate_integrity()
     print_summary()
 
 

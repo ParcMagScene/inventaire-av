@@ -31,6 +31,7 @@ hidden_imports = [
     "reportlab.lib",
     "reportlab.platypus",
     "reportlab.graphics",
+    "openpyxl",
 ]
 
 a = Analysis(
@@ -88,13 +89,13 @@ app = BUNDLE(
     bundle_identifier="com.inventaireav.app",
     info_plist={
         "CFBundleDisplayName": "Inventaire AV",
-        "CFBundleShortVersionString": "1.0.0",
-        "CFBundleVersion": "1.0.0",
+        "CFBundleShortVersionString": "2.0.0",
+        "CFBundleVersion": "2.0.0",
         "CFBundleName": "Inventaire AV",
         "NSHighResolutionCapable": True,
         "NSRequiresAquaSystemAppearance": False,  # Supporte le dark mode macOS
         "CFBundleDocumentTypes": [],
         "LSMinimumSystemVersion": "10.15.0",
-        "NSHumanReadableCopyright": "© 2024 Inventaire AV",
+        "NSHumanReadableCopyright": "© 2024–2026 Inventaire AV",
     },
 )

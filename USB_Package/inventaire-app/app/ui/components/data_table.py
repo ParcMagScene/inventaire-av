@@ -138,21 +138,38 @@ class DataTable(QWidget):
         if not sel:
             return None
         row = sel[0].row()
-        # Reconstituer la ligne affichée puis trouver dans _all_data
+        # Reconstituer la ligne affichée (nombre de colonnes du tableau)
+        col_count = self.table.columnCount()
         displayed = []
-        for c in range(self.table.columnCount()):
+        for c in range(col_count):
             item = self.table.item(row, c)
             displayed.append(item.text() if item else "")
+        # Comparer uniquement les N premières colonnes de _all_data
         for i, data_row in enumerate(self._all_data):
-            if [str(v) if v is not None else "" for v in data_row] == displayed:
+            truncated = [str(v) if v is not None else "" for v in data_row[:col_count]]
+            if truncated == displayed:
                 return i
-        return row
+        return None
 
     def selected_row_data(self) -> list | None:
+        """Renvoie les données complètes (_all_data) de la ligne sélectionnée."""
         idx = self.selected_row_index()
         if idx is not None and idx < len(self._all_data):
             return self._all_data[idx]
-        return None
+        # Fallback : lire directement depuis le widget (avec les types d'origine)
+        sel = self.table.selectedItems()
+        if not sel:
+            return None
+        row = sel[0].row()
+        data = []
+        for c in range(self.table.columnCount()):
+            item = self.table.item(row, c)
+            if item is not None:
+                user_data = item.data(Qt.UserRole)
+                data.append(user_data if user_data is not None else item.text())
+            else:
+                data.append("")
+        return data
 
     def clear(self):
         self._all_data.clear()

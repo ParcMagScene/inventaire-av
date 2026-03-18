@@ -9,7 +9,7 @@ import sys
 import os
 from pathlib import Path
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 # ── Résolution robuste du chemin ──────────────────────────
 # Fonctionne que l'on lance via `python -m app.main`, `python app/main.py`
@@ -56,6 +56,14 @@ def main():
 
     # Initialiser la base de données (crée les tables + seed au 1er lancement)
     init_db()
+
+    # Sauvegarde automatique au lancement
+    try:
+        from app.core.backup_manager import auto_backup
+        auto_backup()
+        print("  [✓] Sauvegarde automatique effectuée")
+    except Exception as e:
+        print(f"  [⚠] Sauvegarde auto : {e}")
 
     # Vérification d'intégrité (non bloquante)
     try:

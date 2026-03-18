@@ -17,6 +17,7 @@ from .views.locations_view import LocationsView
 from .views.suppliers_view import SuppliersView
 from .views.price_settings_view import PriceSettingsView
 from .views.export_view import ExportView
+from .views.backup_view import BackupView
 from .views.about_view import AboutView
 
 STYLES_PATH = Path(__file__).resolve().parent / "styles_dark.qss"
@@ -66,6 +67,7 @@ class MainWindow(QMainWindow):
             SuppliersView(),
             PriceSettingsView(),
             ExportView(),
+            BackupView(),
             AboutView(),
         ]
         for v in self.views:

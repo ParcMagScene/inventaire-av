@@ -44,6 +44,7 @@ class Sidebar(QWidget):
         ("Fournisseurs", "supplier"),
         ("Paramètres prix", "price"),
         ("Export", "pdf"),
+        ("Sauvegarde", "backup"),
         ("À propos", "about"),
     ]
 

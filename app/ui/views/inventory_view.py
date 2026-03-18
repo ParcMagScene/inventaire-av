@@ -12,7 +12,7 @@ from ...core import database as db
 from ...core.models import Article, PriceHistory
 from ...core.price_engine import PriceEngine
 from ..components.data_table import DataTable
-from ..components.dialogs import ArticleDialog, PriceHistoryDialog
+from ..components.dialogs import ArticleDialog, PriceHistoryDialog, StructuredAddDialog
 
 # Couleurs thème
 _DANGER = QColor("#ff5252")
@@ -71,6 +71,11 @@ class InventoryView(QWidget):
         btn_add = QPushButton("  Ajouter")
         btn_add.clicked.connect(self._add)
         top_bar.addWidget(btn_add)
+
+        btn_add_struct = QPushButton("  Ajout structuré")
+        btn_add_struct.setObjectName("btnSecondary")
+        btn_add_struct.clicked.connect(self._add_structured)
+        top_bar.addWidget(btn_add_struct)
 
         btn_edit = QPushButton("  Modifier")
         btn_edit.setObjectName("btnSecondary")
@@ -265,6 +270,21 @@ class InventoryView(QWidget):
             article = dlg.get_article()
             article = self.engine.apply_price(article)
             db.add_article(article)
+            self.refresh()
+
+    # ─── Ajout structuré (par outillage) ─────────────
+    def _add_structured(self):
+        dlg = StructuredAddDialog(
+            self,
+            categories=db.get_categories(),
+            locations=db.get_locations(),
+            suppliers=db.get_suppliers(),
+        )
+        if dlg.exec() == StructuredAddDialog.Accepted:
+            articles = dlg.get_articles()
+            for article in articles:
+                article = self.engine.apply_price(article)
+                db.add_article(article)
             self.refresh()
 
     # ─── Modifier ────────────────────────────────────

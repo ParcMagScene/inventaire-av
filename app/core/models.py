@@ -54,6 +54,7 @@ class Article:
     confidence_score: int = 0         # 0–100 score de confiance numérique
     price_source: str = ""
     notes: str = ""
+    tool_type_id: Optional[int] = None
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
@@ -141,3 +142,23 @@ class PriceSuggestion:
     source: str = ""
     explanation: str = ""
     anomalies: list = field(default_factory=list)  # liste d'anomalies détectées
+
+
+@dataclass
+class ToolCategory:
+    """Catégorie du catalogue outillage."""
+    id: Optional[int] = None
+    name: str = ""
+    description: str = ""
+    icon: str = ""
+
+
+@dataclass
+class ToolType:
+    """Type d'outillage dans une catégorie."""
+    id: Optional[int] = None
+    category_id: Optional[int] = None
+    name: str = ""
+    description: str = ""
+    default_ref: str = ""
+    default_price: float = 0.0

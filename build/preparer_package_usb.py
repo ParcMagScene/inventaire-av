@@ -78,7 +78,7 @@ def download_file(url: str, dest: Path, label: str = ""):
 
 def step_clean():
     """Nettoie et crée le dossier de sortie."""
-    print("  [1/6] Préparation du dossier de sortie...")
+    print("  [1/7] Préparation du dossier de sortie...")
     if OUTPUT_DIR.exists():
         shutil.rmtree(OUTPUT_DIR)
     OUTPUT_DIR.mkdir(parents=True)
@@ -87,16 +87,17 @@ def step_clean():
 
 def step_copy_app():
     """Copie l'application."""
-    print("  [2/6] Copie de l'application...")
+    print("  [2/7] Copie de l'application...")
     app_dest = OUTPUT_DIR / "inventaire-app"
     app_dest.mkdir(parents=True, exist_ok=True)
 
     # Copier les dossiers
+    ignore_pycache = shutil.ignore_patterns("__pycache__", "*.pyc")
     for name, is_dir in APP_ITEMS:
         src = SRC_DIR / name
         dst = app_dest / name
         if is_dir and src.is_dir():
-            shutil.copytree(src, dst, dirs_exist_ok=True)
+            shutil.copytree(src, dst, dirs_exist_ok=True, ignore=ignore_pycache)
         elif not is_dir and src.is_file():
             shutil.copy2(src, dst)
 
@@ -109,12 +110,15 @@ def step_copy_app():
     # Créer data/ si absent
     (app_dest / "app" / "data").mkdir(parents=True, exist_ok=True)
 
+    # Créer backups/ si absent
+    (app_dest / "app" / "backups").mkdir(parents=True, exist_ok=True)
+
     print("        → Application copiée")
 
 
 def step_download_python():
     """Télécharge Python embarqué."""
-    print(f"  [3/6] Téléchargement de Python embarqué {PYTHON_VERSION}...")
+    print(f"  [3/7] Téléchargement de Python embarqué {PYTHON_VERSION}...")
     embed_dir = OUTPUT_DIR / "python_embed"
     embed_dir.mkdir(parents=True, exist_ok=True)
 
@@ -141,7 +145,7 @@ def step_download_python():
 
 def step_install_pip():
     """Installe pip dans Python embarqué."""
-    print("  [4/6] Installation de pip...")
+    print("  [4/7] Installation de pip...")
     python_exe = OUTPUT_DIR / "python_embed" / "python" / "python.exe"
     get_pip = OUTPUT_DIR / "python_embed" / "python" / "get-pip.py"
 
@@ -161,7 +165,7 @@ def step_install_pip():
 
 def step_download_wheels():
     """Télécharge les wheels pour Windows."""
-    print("  [5/6] Téléchargement des packages (wheels)...")
+    print("  [5/7] Téléchargement des packages (wheels)...")
     wheels_dir = OUTPUT_DIR / "inventaire-app" / "wheels"
     wheels_dir.mkdir(parents=True, exist_ok=True)
 
@@ -245,6 +249,7 @@ echo        - Python copie.
 
 echo [3/5] Copie de l'application...
 xcopy /E /I /Y "%USB_DIR%inventaire-app" "%INSTALL_DIR%\inventaire-app" >nul
+if not exist "%INSTALL_DIR%\inventaire-app\app\backups" mkdir "%INSTALL_DIR%\inventaire-app\app\backups"
 echo        - Application copiee.
 
 :: Mettre a jour le fichier ._pth avec le chemin absolu de l'app
@@ -405,6 +410,10 @@ def print_summary():
     print("    │   └── python/")
     print("    └── inventaire-app/        ← Application + wheels")
     print("        ├── app/")
+    print("        │   ├── core/          (+ migrations, backup)")
+    print("        │   ├── ui/views/      (+ backup_view)")
+    print("        │   ├── backups/       ← Sauvegardes auto")
+    print("        │   └── data/")
     print("        ├── wheels/")
     print("        ├── .portable           ← Marqueur mode portable")
     print("        ├── integrity_manifest.json")

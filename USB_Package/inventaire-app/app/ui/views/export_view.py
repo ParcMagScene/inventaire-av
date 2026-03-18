@@ -1,0 +1,161 @@
+"""
+export_view.py — Export PDF, CSV et XLSX avec filtres.
+"""
+import os
+from datetime import datetime
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox,
+    QComboBox, QPushButton, QLabel, QFileDialog, QMessageBox,
+)
+
+from ...core import database as db
+from ...core.pdf_exporter import PDFExporter
+from ...core.export_engine import ExportEngine
+
+
+class ExportView(QWidget):
+    """Écran d'export PDF."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(16)
+
+        title = QLabel("Export")
+        title.setObjectName("sectionTitle")
+        layout.addWidget(title)
+
+        desc = QLabel(
+            "Générez un rapport PDF, CSV ou XLSX de votre inventaire, avec totaux "
+            "par catégorie, par emplacement et totaux globaux."
+        )
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
+
+        # ── Filtres ──
+        grp = QGroupBox("Filtres (optionnels)")
+        form = QFormLayout(grp)
+
+        self.cat_combo = QComboBox()
+        self.cat_combo.addItem("Toutes les catégories", None)
+        for c in db.get_categories():
+            self.cat_combo.addItem(c.name, c.id)
+        form.addRow("Catégorie :", self.cat_combo)
+
+        self.loc_combo = QComboBox()
+        self.loc_combo.addItem("Tous les emplacements", None)
+        for l in db.get_locations():
+            self.loc_combo.addItem(l.name, l.id)
+        form.addRow("Emplacement :", self.loc_combo)
+
+        layout.addWidget(grp)
+
+        # ── Boutons export ──
+        btn_bar = QHBoxLayout()
+        btn_bar.addStretch()
+
+        btn_export = QPushButton("  Exporter en PDF")
+        btn_export.setMinimumWidth(180)
+        btn_export.setMinimumHeight(44)
+        btn_export.clicked.connect(self._export)
+        btn_bar.addWidget(btn_export)
+
+        btn_csv = QPushButton("  Exporter en CSV")
+        btn_csv.setObjectName("btnSecondary")
+        btn_csv.setMinimumWidth(180)
+        btn_csv.setMinimumHeight(44)
+        btn_csv.clicked.connect(self._export_csv)
+        btn_bar.addWidget(btn_csv)
+
+        btn_xlsx = QPushButton("  Exporter en XLSX")
+        btn_xlsx.setObjectName("btnSecondary")
+        btn_xlsx.setMinimumWidth(180)
+        btn_xlsx.setMinimumHeight(44)
+        btn_xlsx.clicked.connect(self._export_xlsx)
+        btn_bar.addWidget(btn_xlsx)
+
+        btn_bar.addStretch()
+        layout.addLayout(btn_bar)
+
+        # ── Status ──
+        self.status_label = QLabel("")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.status_label)
+
+        layout.addStretch()
+
+    def _export(self):
+        date_str = datetime.now().strftime("%Y-%m-%d_%H%M")
+        default_name = f"inventaire_{date_str}.pdf"
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Enregistrer le PDF", default_name,
+            "Fichiers PDF (*.pdf)",
+        )
+        if not path:
+            return
+
+        try:
+            exporter = PDFExporter()
+            exporter.export(
+                path,
+                category_id=self.cat_combo.currentData(),
+                location_id=self.loc_combo.currentData(),
+            )
+            self.status_label.setText(f"✅  PDF exporté : {path}")
+            QMessageBox.information(self, "Succès", f"PDF exporté avec succès :\n{path}")
+        except Exception as e:
+            self.status_label.setText(f"❌  Erreur : {e}")
+            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'export :\n{e}")
+
+    def _export_csv(self):
+        date_str = datetime.now().strftime("%Y-%m-%d_%H%M")
+        default_name = f"inventaire_{date_str}.csv"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Enregistrer le CSV", default_name,
+            "Fichiers CSV (*.csv)",
+        )
+        if not path:
+            return
+        try:
+            engine = ExportEngine()
+            engine.export_csv(path)
+            self.status_label.setText(f"✅  CSV exporté : {path}")
+            QMessageBox.information(self, "Succès", f"CSV exporté avec succès :\n{path}")
+        except Exception as e:
+            self.status_label.setText(f"❌  Erreur : {e}")
+            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'export CSV :\n{e}")
+
+    def _export_xlsx(self):
+        date_str = datetime.now().strftime("%Y-%m-%d_%H%M")
+        default_name = f"inventaire_{date_str}.xlsx"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Enregistrer le XLSX", default_name,
+            "Fichiers Excel (*.xlsx)",
+        )
+        if not path:
+            return
+        try:
+            engine = ExportEngine()
+            engine.export_xlsx(path)
+            self.status_label.setText(f"✅  XLSX exporté : {path}")
+            QMessageBox.information(self, "Succès", f"XLSX exporté avec succès :\n{path}")
+        except Exception as e:
+            self.status_label.setText(f"❌  Erreur : {e}")
+            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'export XLSX :\n{e}")
+
+    def refresh(self):
+        # Recharger les combos
+        self.cat_combo.clear()
+        self.cat_combo.addItem("Toutes les catégories", None)
+        for c in db.get_categories():
+            self.cat_combo.addItem(c.name, c.id)
+
+        self.loc_combo.clear()
+        self.loc_combo.addItem("Tous les emplacements", None)
+        for l in db.get_locations():
+            self.loc_combo.addItem(l.name, l.id)

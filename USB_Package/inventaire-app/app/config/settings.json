@@ -1,0 +1,16 @@
+{
+    "app_name": "Inventaire AV",
+    "version": "2.1.0",
+    "db_path": "data/inventaire.db",
+    "language": "fr",
+    "theme": "dark",
+    "pdf_logo_path": "ui/icons/logo.svg",
+    "currency": "€",
+    "default_price_mode": "automatique",
+    "price_low_factor": 0.80,
+    "price_high_factor": 1.25,
+    "outlier_threshold_sigma": 2.0,
+    "history_weight_decay_days": 180,
+    "window_width": 1280,
+    "window_height": 800
+}

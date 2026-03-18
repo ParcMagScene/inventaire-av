@@ -1,0 +1,13 @@
+[
+    {"name": "Atelier", "description": "Atelier technique principal"},
+    {"name": "Stock principal", "description": "Zone de stockage principale"},
+    {"name": "Stock secondaire", "description": "Zone de stockage secondaire"},
+    {"name": "Flight-case A", "description": "Flight-case de tournée A"},
+    {"name": "Flight-case B", "description": "Flight-case de tournée B"},
+    {"name": "Rayonnage A1", "description": "Étagère A, rangée 1"},
+    {"name": "Rayonnage A2", "description": "Étagère A, rangée 2"},
+    {"name": "Rayonnage B1", "description": "Étagère B, rangée 1"},
+    {"name": "Rayonnage B2", "description": "Étagère B, rangée 2"},
+    {"name": "Bureau régie", "description": "Bureau de la régie technique"},
+    {"name": "Véhicule", "description": "Véhicule de transport"}
+]

@@ -1,0 +1,2 @@
+USB_Package/inventaire-app/wheels/*.whl filter=lfs diff=lfs merge=lfs -text
+USB_Package/python_embed/** filter=lfs diff=lfs merge=lfs -text
